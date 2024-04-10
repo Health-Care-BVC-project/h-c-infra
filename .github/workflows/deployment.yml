@@ -18,9 +18,9 @@ jobs:
           dotnet-version: 8.0
 
       - run: |
-          docker build -t ${{ secrets.ACR_NAME }}/hcportal_be_image:latest .
+          docker build -t ${{ secrets.ACR_NAME }}/hcportal-be-image:latest .
           mkdir ./docker_image
-          docker save hcportal_be_image:latest | gzip > ./docker_image/hcportal_be_image.tar.gz
+          docker save hcportal-be-image:latest | gzip > ./docker_image/hcportal-be-image.tar.gz
 
       - name: Push Docker image to Git infra repo
         uses: ad-m/github-push-action@master
