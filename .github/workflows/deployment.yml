@@ -1,0 +1,31 @@
+name: Deploy to Azure Container Registry
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@main
+
+      - name: "Setup DotNet 8 Environment"
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0
+
+      - run: |
+          docker build -t ${{ secrets.ACR_NAME }}/hcportal_be_image:latest .
+          mkdir ./docker_image
+          docker save hcportal_be_image:latest | gzip > ./docker_image/hcportal_be_image.tar.gz
+
+      - name: Push Docker image to Git infra repo
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.HCPORTAL_INFRA_REPO_PUSH_KEY }}
+          repository: Health-Care-BVC-project/h-c-infra
+          directory: ./docker_image
+          branch: dev
