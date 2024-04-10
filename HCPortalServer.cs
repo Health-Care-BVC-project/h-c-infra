@@ -187,7 +187,11 @@ namespace HC.Function
 
             if (Environment.GetEnvironmentVariable("AZURE_FUNCTIONS_ENVIRONMENT") == "Development")
             {
-                return Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
+                var connString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
+                if (connString == null)
+                    throw new Exception("MYSQL_CONNECTION_STRING environment variable is not set.");
+
+                return connString;
             }
             else
             {
@@ -196,6 +200,14 @@ namespace HC.Function
                 string clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
                 string clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
                 string keyVaultUrl = Environment.GetEnvironmentVariable("KEY_VAULT_URL");
+
+                if (
+                    tenantId == null ||
+                    clientId == null ||
+                    clientSecret == null ||
+                    keyVaultUrl == null
+                )
+                    throw new Exception("One or more environment variables are not set.");
 
                 var client = new SecretClient(vaultUri: new Uri(keyVaultUrl), credential: new ClientSecretCredential(tenantId, clientId, clientSecret));
                 KeyVaultSecret secret = client.GetSecret(connectionStringKey);
