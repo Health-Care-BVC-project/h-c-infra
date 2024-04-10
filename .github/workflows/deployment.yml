@@ -28,6 +28,7 @@ jobs:
         run: |
           git config --local user.email "g.maressolano090@mybvc.ca"
           git config --local user.name "github-actions[bot]"
+          git add ./docker_image
           git commit -a -m "Update backend docker image"
 
       - name: Push Docker image to Git infra repo
