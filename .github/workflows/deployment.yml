@@ -25,14 +25,18 @@ jobs:
           mkdir ./docker_image
           docker save hcportal-be-image:latest | gzip > ./docker_image/hcportal-be-image.tar.gz
 
-      - uses: GuillaumeFalourd/git-commit-push@v1.3
+      - name: "Commit files"
+        run: |
+          git config --local user.email "g.maressolano090@mybvc.ca"
+          git config --local user.name "github-actions[bot]"
+          git add ./docker_image
+          git commit -a -m "Update backend docker image"
+
+      - name: Push Docker image to Git infra repo
+        uses: ad-m/github-push-action@master
         with:
-          email: g.maressolano090@mybvc.ca
-          name: github-actions[bot]
-          commit_message: Update backend docker image
-          target_branch: main
-          files: docker_image/hcportal-be-image.tar.gz
-          remote_repository: https://github.com/Health-Care-BVC-project/h-c-infra
-          access_token: ${{ secrets.HCPORTAL_INFRA_REPO_PUSH_KEY }}
+          github_token: ${{ secrets.HCPORTAL_INFRA_REPO_PUSH_KEY }}
+          repository: Health-Care-BVC-project/h-c-infra
           force: true
-          empty: false
+          directory: ./docker_image
+          branch: main
