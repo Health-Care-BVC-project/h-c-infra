@@ -10,8 +10,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@main
+      - uses: actions/checkout@v4
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: "Setup DotNet 8 Environment"
@@ -24,18 +25,14 @@ jobs:
           mkdir ./docker_image
           docker save hcportal-be-image:latest | gzip > ./docker_image/hcportal-be-image.tar.gz
 
-      - name: "Commit files"
-        run: |
-          git config --local user.email "g.maressolano090@mybvc.ca"
-          git config --local user.name "github-actions[bot]"
-          git add ./docker_image
-          git commit -a -m "Update backend docker image"
-
-      - name: Push Docker image to Git infra repo
-        uses: ad-m/github-push-action@master
+      - uses: GuillaumeFalourd/git-commit-push@v1.3
         with:
-          github_token: ${{ secrets.HCPORTAL_INFRA_REPO_PUSH_KEY }}
-          repository: Health-Care-BVC-project/h-c-infra
+          email: g.maressolano090@mybvc.ca
+          name: github-actions[bot]
+          commit_message: Update backend docker image
+          target_branch: main
+          files: docker_image/hcportal-be-image.tar.gz
+          remote_repository: https://github.com/Health-Care-BVC-project/h-c-infra
+          access_token: ${{ secrets.HCPORTAL_INFRA_REPO_PUSH_KEY }}
           force: true
-          directory: ./docker_image
-          branch: main
+          empty: false
