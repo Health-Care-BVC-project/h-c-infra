@@ -28,7 +28,7 @@ jobs:
       - name: "Commit files"
         run: |
           git config --local user.email "g.maressolano090@mybvc.ca"
-          git config --local user.name "github-actions[bot]"
+          git config --local user.name "gh-actions[bot]"
           git add ./docker_image
           git commit -a -m "Update backend docker image"
 
