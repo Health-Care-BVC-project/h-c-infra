@@ -1,0 +1,26 @@
+name: Build and Test c# function app project
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout GitHub Action"
+        uses: actions/checkout@v3
+
+      - name: "Setup DotNet 8 Environment"
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: 8.0
+
+      - name: Resolve Project Dependencies Using Dotnet
+        shell: bash
+        run: |
+          pushd './'
+          dotnet build
+          popd
