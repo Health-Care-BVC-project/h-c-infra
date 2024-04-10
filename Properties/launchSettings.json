@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "h_c_backend": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7240",
+      "launchBrowser": false
+    }
+  }
+}
