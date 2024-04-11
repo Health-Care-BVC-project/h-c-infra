@@ -68,7 +68,7 @@ namespace HC.Function
                             {
                                 string hashedPassword = reader.GetString(0);
                                 string userId = reader.GetValue(1)?.ToString();
-                                if (BCrypt.Net.BCrypt.EnhancedVerify(data.Password, hashedPassword))
+                                if (userId != null && BCrypt.Net.BCrypt.EnhancedVerify(data.Password, hashedPassword))
                                 {
                                     var tokenHandler = new JwtSecurityTokenHandler();
                                     var key = Encoding.ASCII.GetBytes(GetJwtSecretKey());
@@ -258,7 +258,7 @@ namespace HC.Function
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var data = JsonSerializer.Deserialize<PatientData>(requestBody, _jsonOptions);
 
-            if (string.IsNullOrEmpty(data.FirstName) && string.IsNullOrEmpty(data.LastName) && string.IsNullOrEmpty(data.Email))
+            if (data != null && string.IsNullOrEmpty(data.FirstName) && string.IsNullOrEmpty(data.LastName) && string.IsNullOrEmpty(data.Email))
             {
                 _logger.LogInformation("Invalid params when trying to update patient");
                 return new BadRequestObjectResult("At least one of the following properties must be changed: First name, last name or email");
