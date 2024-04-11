@@ -46,7 +46,7 @@ namespace HC.Function
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var data = JsonSerializer.Deserialize<UserData>(requestBody, _jsonOptions);
 
-            if (string.IsNullOrEmpty(data.Username) || string.IsNullOrEmpty(data.Password))
+            if (data == null || string.IsNullOrEmpty(data.Username) || string.IsNullOrEmpty(data.Password))
             {
                 _logger.LogInformation("Invalid params when trying to login");
                 return new BadRequestObjectResult("Username and password are required");
@@ -106,7 +106,7 @@ namespace HC.Function
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var data = JsonSerializer.Deserialize<UserData>(requestBody, _jsonOptions);
 
-            if (string.IsNullOrEmpty(data.Username) || string.IsNullOrEmpty(data.Password))
+            if (data == null || string.IsNullOrEmpty(data.Username) || string.IsNullOrEmpty(data.Password))
             {
                 _logger.LogInformation("Invalid params when trying to login");
                 return new BadRequestObjectResult("Username and password are required");
@@ -145,7 +145,7 @@ namespace HC.Function
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var data = JsonSerializer.Deserialize<PatientData>(requestBody, _jsonOptions);
 
-            if (string.IsNullOrEmpty(data.FirstName) || string.IsNullOrEmpty(data.LastName) || string.IsNullOrEmpty(data.Email))
+            if (data == null || string.IsNullOrEmpty(data.FirstName) || string.IsNullOrEmpty(data.LastName) || string.IsNullOrEmpty(data.Email))
             {
                 _logger.LogInformation("Invalid params when trying to login");
                 return new BadRequestObjectResult("Username and password are required");
