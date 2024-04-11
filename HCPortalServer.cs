@@ -1,35 +1,56 @@
+using System.Text;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
 using Azure.Identity;
+using System.Text.Json;
 using Azure.Security.KeyVault.Secrets;
+using System.IdentityModel.Tokens.Jwt;
+using Microsoft.IdentityModel.Tokens;
 
 namespace HC.Function
 {
+    public class UserData
+    {
+        public string Username { get; set; }
+        public string Password { get; set; }
+    }
+    public class PatientData
+    {
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
+        public string Email { get; set; }
+    }
+
     public class HCPortalServer
     {
         private readonly ILogger<HCPortalServer> _logger;
+        JsonSerializerOptions _jsonOptions;
 
         public HCPortalServer(ILogger<HCPortalServer> logger)
         {
             _logger = logger;
+            _jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
         }
 
         [Function("SignIn")]
         public async Task<IActionResult> SignIn([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequest req)
         {
-            _logger.LogInformation("SignIn function called.");
 
-            if (!req.Query.ContainsKey("username") || !req.Query.ContainsKey("password"))
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            var data = JsonSerializer.Deserialize<UserData>(requestBody, _jsonOptions);
+
+            if (data == null || string.IsNullOrEmpty(data.Username) || string.IsNullOrEmpty(data.Password))
             {
                 _logger.LogInformation("Invalid params when trying to login");
                 return new BadRequestObjectResult("Username and password are required");
             }
-
-            string username = req.Query["username"];
-            string password = req.Query["password"];
 
             try
             {
@@ -38,16 +59,31 @@ namespace HC.Function
                     conn.Open();
                     using (var command = conn.CreateCommand())
                     {
-                        command.CommandText = "SELECT user_password FROM users WHERE username = @username;";
-                        command.Parameters.AddWithValue("@username", username);
+                        command.CommandText = "SELECT user_password, user_id FROM users WHERE username = @username;";
+                        command.Parameters.AddWithValue("@username", data.Username);
 
                         using (var reader = await command.ExecuteReaderAsync())
                         {
                             if (await reader.ReadAsync())
                             {
                                 string hashedPassword = reader.GetString(0);
-                                if (BCrypt.Net.BCrypt.Verify(password, hashedPassword))
-                                    return new OkObjectResult("User authenticated successfully.");
+                                string userId = reader.GetValue(1)?.ToString();
+                                if (userId != null && BCrypt.Net.BCrypt.EnhancedVerify(data.Password, hashedPassword))
+                                {
+                                    var tokenHandler = new JwtSecurityTokenHandler();
+                                    var key = Encoding.ASCII.GetBytes(GetJwtSecretKey());
+
+                                    var tokenDescriptor = new SecurityTokenDescriptor
+                                    {
+                                        Subject = new ClaimsIdentity(new[] { new Claim("id", userId) }),
+                                        Expires = DateTime.UtcNow.AddDays(7),
+                                        SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+                                    };
+                                    var token = tokenHandler.CreateToken(tokenDescriptor);
+                                    var tokenString = tokenHandler.WriteToken(token);
+
+                                    return new OkObjectResult(new { Token = tokenString });
+                                }
 
                                 return new BadRequestObjectResult("Invalid password.");
                             }
@@ -66,17 +102,17 @@ namespace HC.Function
         [Function("SignUp")]
         public async Task<IActionResult> SignUp([HttpTrigger(AuthorizationLevel.Anonymous, "post")] HttpRequest req)
         {
-            _logger.LogInformation("SignUp function called.");
 
-            if (!req.Query.ContainsKey("username") || !req.Query.ContainsKey("password"))
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            var data = JsonSerializer.Deserialize<UserData>(requestBody, _jsonOptions);
+
+            if (data == null || string.IsNullOrEmpty(data.Username) || string.IsNullOrEmpty(data.Password))
             {
-                _logger.LogInformation("Invalid params when trying to signup");
+                _logger.LogInformation("Invalid params when trying to login");
                 return new BadRequestObjectResult("Username and password are required");
             }
 
-            string username = req.Query["username"];
-            string password = req.Query["password"];
-            string passwordHash = BCrypt.Net.BCrypt.EnhancedHashPassword(password);
+            string passwordHash = BCrypt.Net.BCrypt.EnhancedHashPassword(data.Password);
 
             try
             {
@@ -87,7 +123,7 @@ namespace HC.Function
                     {
                         command.CommandText = "INSERT INTO users (username, user_password) VALUES (@username, @password);";
 
-                        command.Parameters.AddWithValue("@username", username);
+                        command.Parameters.AddWithValue("@username", data.Username);
                         command.Parameters.AddWithValue("@password", passwordHash);
 
                         var queryResult = await command.ExecuteNonQueryAsync();
@@ -101,20 +137,19 @@ namespace HC.Function
             }
         }
 
-        [Function("ListPatients")]
+        [Function("CreatePatients")]
         public async Task<IActionResult> CreatePatient([HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "patients")] HttpRequest req)
         {
             _logger.LogInformation("CreatePatient function called.");
 
-            if (!req.Query.ContainsKey("first_name") || !req.Query.ContainsKey("last_name") || !req.Query.ContainsKey("email"))
-            {
-                _logger.LogInformation("Invalid params when trying to signup");
-                return new BadRequestObjectResult("first name, last name and email are required");
-            }
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            var data = JsonSerializer.Deserialize<PatientData>(requestBody, _jsonOptions);
 
-            string firstName = req.Query["first_name"];
-            string lastName = req.Query["last_name"];
-            string email = req.Query["email"];
+            if (data == null || string.IsNullOrEmpty(data.FirstName) || string.IsNullOrEmpty(data.LastName) || string.IsNullOrEmpty(data.Email))
+            {
+                _logger.LogInformation("Invalid params when trying to login");
+                return new BadRequestObjectResult("Username and password are required");
+            }
 
             try
             {
@@ -125,9 +160,9 @@ namespace HC.Function
                     {
                         command.CommandText = "INSERT INTO patients (first_name, last_name, email) VALUES (@firstname, @lastname, @email);";
 
-                        command.Parameters.AddWithValue("@firstname", firstName);
-                        command.Parameters.AddWithValue("@lastname", lastName);
-                        command.Parameters.AddWithValue("@email", email);
+                        command.Parameters.AddWithValue("@firstname", data.FirstName);
+                        command.Parameters.AddWithValue("@lastname", data.LastName);
+                        command.Parameters.AddWithValue("@email", data.Email);
 
                         var queryResult = await command.ExecuteNonQueryAsync();
                         return new OkObjectResult("Patient created successfully.");
@@ -140,7 +175,7 @@ namespace HC.Function
             }
         }
 
-        [Function("CreatePatients")]
+        [Function("ListPatients")]
         public async Task<IActionResult> ListPatients([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "patients")] HttpRequest req)
         {
             _logger.LogInformation("ListPatients function called.");
@@ -165,8 +200,8 @@ namespace HC.Function
                                     FirstName = reader.GetString(1),
                                     LastName = reader.GetString(2),
                                     Email = reader.GetString(3),
-                                    CreatedAt = reader.GetString(4),
-                                    UpdatedAt = reader.GetString(5)
+                                    CreatedAt = reader.GetDateTime(4).ToString("yyyy-MM-dd"),
+                                    UpdatedAt = reader.GetDateTime(5).ToString("yyyy-MM-dd")
                                 });
                             }
 
@@ -181,39 +216,168 @@ namespace HC.Function
             }
         }
 
-        private string GetConnectionString()
+        [Function("RemovePatient")]
+        public async Task<IActionResult> RemovePatient([HttpTrigger(AuthorizationLevel.Anonymous, "delete", Route = "patients/{id}")] HttpRequest req, int id)
         {
-            string connectionStringKey = Environment.GetEnvironmentVariable("SECRET_NAME");
+            _logger.LogInformation("RemovePatient function called.");
 
-            if (Environment.GetEnvironmentVariable("AZURE_FUNCTIONS_ENVIRONMENT") == "Development")
+            try
             {
-                var connString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
-                if (connString == null)
-                    throw new Exception("MYSQL_CONNECTION_STRING environment variable is not set.");
+                using (MySqlConnection conn = new MySqlConnection(GetConnectionString()))
+                {
+                    conn.Open();
+                    using (var command = conn.CreateCommand())
+                    {
+                        command.CommandText = "DELETE FROM patients WHERE patient_id = @id;";
+                        command.Parameters.AddWithValue("@id", id);
 
-                return connString;
+                        var queryResult = await command.ExecuteNonQueryAsync();
+
+                        if (queryResult > 0)
+                        {
+                            return new OkObjectResult($"Patient with ID {id} removed successfully.");
+                        }
+                        else
+                        {
+                            return new NotFoundResult();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(ex.Message);
+            }
+        }
+
+        [Function("EditPatient")]
+        public async Task<IActionResult> EditPatient([HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "patients/{id}")] HttpRequest req, int id)
+        {
+            _logger.LogInformation("EditPatient function called.");
+
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            var data = JsonSerializer.Deserialize<PatientData>(requestBody, _jsonOptions);
+
+            if (data == null || (string.IsNullOrEmpty(data.FirstName) && string.IsNullOrEmpty(data.LastName) && string.IsNullOrEmpty(data.Email)))
+            {
+                _logger.LogInformation("Invalid params when trying to update patient");
+                return new BadRequestObjectResult("At least one of the following properties must be changed: First name, last name or email");
+            }
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(GetConnectionString()))
+                {
+                    conn.Open();
+                    using (var command = conn.CreateCommand())
+                    {
+                        command.CommandText = "UPDATE patients SET first_name = @firstname, last_name = @lastname, email = @email WHERE patient_id = @id;";
+
+                        command.Parameters.AddWithValue("@firstname", data.FirstName);
+                        command.Parameters.AddWithValue("@lastname", data.LastName);
+                        command.Parameters.AddWithValue("@email", data.Email);
+                        command.Parameters.AddWithValue("@id", id);
+
+                        var queryResult = await command.ExecuteNonQueryAsync();
+
+                        if (queryResult > 0)
+                        {
+                            return new OkObjectResult($"Patient with ID {id} updated successfully.");
+                        }
+                        else
+                        {
+                            return new NotFoundResult();
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(ex.Message);
+            }
+        }
+
+        [Function("GetPatientById")]
+        public async Task<IActionResult> GetPatientById([HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "patients/{id}")] HttpRequest req, int id)
+        {
+            _logger.LogInformation("GetPatientById function called.");
+
+            try
+            {
+                using (MySqlConnection conn = new MySqlConnection(GetConnectionString()))
+                {
+                    conn.Open();
+                    using (var command = conn.CreateCommand())
+                    {
+                        command.CommandText = "SELECT patient_id, first_name, last_name, email, created_at, updated_at FROM patients WHERE patient_id = @id;";
+                        command.Parameters.AddWithValue("@id", id);
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            if (await reader.ReadAsync())
+                            {
+                                var patient = new Patient
+                                {
+                                    PatientId = reader.GetInt32(0),
+                                    FirstName = reader.GetString(1),
+                                    LastName = reader.GetString(2),
+                                    Email = reader.GetString(3),
+                                    CreatedAt = reader.GetDateTime(4).ToString("yyyy-MM-dd"),
+                                    UpdatedAt = reader.GetDateTime(5).ToString("yyyy-MM-dd")
+                                };
+
+                                return new OkObjectResult(patient);
+                            }
+                            else
+                            {
+                                return new NotFoundResult();
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                return new BadRequestObjectResult(ex.Message);
+            }
+        }
+
+        private string GetJwtSecretKey() => GetSecret("SECRET_JWT_KEY");
+        private string GetConnectionString() => GetSecret("MYSQL_CONNECTION_STRING");
+
+        private string GetSecret(string key)
+        {
+            if (GetSecretFromEnvValues("AZURE_FUNCTIONS_ENVIRONMENT") == "Development")
+            {
+                return GetSecretFromEnvValues(key);
             }
             else
             {
-                // In production, get the secret value from Azure Key Vault
-                string tenantId = Environment.GetEnvironmentVariable("TENANT_ID");
-                string clientId = Environment.GetEnvironmentVariable("CLIENT_ID");
-                string clientSecret = Environment.GetEnvironmentVariable("CLIENT_SECRET");
-                string keyVaultUrl = Environment.GetEnvironmentVariable("KEY_VAULT_URL");
-
-                if (
-                    tenantId == null ||
-                    clientId == null ||
-                    clientSecret == null ||
-                    keyVaultUrl == null
-                )
-                    throw new Exception("One or more environment variables are not set.");
-
-                var client = new SecretClient(vaultUri: new Uri(keyVaultUrl), credential: new ClientSecretCredential(tenantId, clientId, clientSecret));
-                KeyVaultSecret secret = client.GetSecret(connectionStringKey);
-
-                return secret.Value;
+                return GetSecretFromKeyVault(key);
             }
         }
+
+        private string GetSecretFromEnvValues(string key)
+        {
+            var value = Environment.GetEnvironmentVariable(key);
+            if (value == null)
+                throw new Exception($"{key} environment variable is not set.");
+
+            return value;
+        }
+
+        private string GetSecretFromKeyVault(string secretName)
+        {
+            string tenantId = GetSecretFromEnvValues("TENANT_ID");
+            string clientId = GetSecretFromEnvValues("CLIENT_ID");
+            string clientSecret = GetSecretFromEnvValues("CLIENT_SECRET");
+            string keyVaultUrl = GetSecretFromEnvValues("KEY_VAULT_URL");
+
+            var client = new SecretClient(vaultUri: new Uri(keyVaultUrl), credential: new ClientSecretCredential(tenantId, clientId, clientSecret));
+            KeyVaultSecret secret = client.GetSecret(secretName);
+
+            return secret.Value;
+        }
+
     }
 }
