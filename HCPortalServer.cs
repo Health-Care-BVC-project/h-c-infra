@@ -251,7 +251,7 @@ namespace HC.Function
         }
 
         [Function("EditPatient")]
-        public async Task<IActionResult> EditPatient([HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "patients/{id}")] HttpRequest req, int id)
+        public async Task<IActionResult> EditPatient([HttpTrigger(AuthorizationLevel.Anonymous, "patch", Route = "patients/{id}")] HttpRequest req, int id)
         {
             _logger.LogInformation("EditPatient function called.");
 
