@@ -258,7 +258,7 @@ namespace HC.Function
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             var data = JsonSerializer.Deserialize<PatientData>(requestBody, _jsonOptions);
 
-            if (data != null && string.IsNullOrEmpty(data.FirstName) && string.IsNullOrEmpty(data.LastName) && string.IsNullOrEmpty(data.Email))
+            if (data == null || (string.IsNullOrEmpty(data.FirstName) && string.IsNullOrEmpty(data.LastName) && string.IsNullOrEmpty(data.Email)))
             {
                 _logger.LogInformation("Invalid params when trying to update patient");
                 return new BadRequestObjectResult("At least one of the following properties must be changed: First name, last name or email");
